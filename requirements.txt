@@ -1,0 +1,13 @@
+# GUI 主题（可选；缺失时自动回退 clam 配色）
+sv-ttk>=2.6
+
+# PDF -> Markdown
+pymupdf>=1.28
+pymupdf4llm==0.3.4
+tabulate>=0.9
+
+# 演示模式画图
+matplotlib>=3.7
+
+# DeepSeek 网页自动化
+playwright>=1.40

@@ -1,0 +1,13 @@
+{
+  "material": "低碳钢 Q235（代表性合成数据）",
+  "E_GPa": 206.0,
+  "ReH_MPa": 250.0,
+  "ReL_MPa": 235.0,
+  "Rm_MPa": 420.0,
+  "A_pct": 26.0,
+  "Fmax_kN": 42.0,
+  "disp_at_Fmax_mm": 10.0,
+  "L0_mm": 50.0,
+  "A0_mm2": 100.0,
+  "source": "synthetic representative of Q235 low-carbon steel (demo only)"
+}
