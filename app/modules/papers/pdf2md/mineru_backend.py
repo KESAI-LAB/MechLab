@@ -13,25 +13,49 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import time
 from pathlib import Path
 
 from ....config import PROJECT_ROOT
+from .. import settings
 
 IMG_SUFFIX = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff"}
 
 
+def _candidate_files() -> list[Path]:
+    """常见 MinerU 可执行文件位置（项目 venv、用户目录、安装目录）。"""
+    cands = [
+        PROJECT_ROOT / ".venvs/mineru/Scripts/mineru.exe",
+        PROJECT_ROOT / ".venvs/mineru/bin/mineru",
+        Path.home() / ".venvs/mineru/Scripts/mineru.exe",
+        Path.home() / ".venvs/mineru/bin/mineru",
+        Path.home() / "MinerU/mineru.exe",
+    ]
+    local = os.environ.get("LOCALAPPDATA")
+    if local:
+        for rel in ("Programs/MinerU/mineru.exe", "Programs/mineru/mineru.exe",
+                    "MinerU/mineru.exe"):
+            cands.append(Path(local) / rel)
+    return cands
+
+
 def find_command() -> list[str] | None:
-    env = os.environ.get("MINERU_CMD", "").strip()
-    if env:
-        return env.split()
-    # 优先项目内专用 venv（避免污染主环境）
-    for rel in (".venvs/mineru/Scripts/mineru.exe", ".venvs/mineru/bin/mineru"):
-        p = PROJECT_ROOT / rel
+    # 1) 环境变量 / 界面里保存的自定义路径
+    for key in ("MINERU_CMD", "mineru_cmd"):
+        raw = (os.environ.get(key, "") if key == "MINERU_CMD"
+               else str(settings.get(key, "") or "")).strip()
+        if raw:
+            cmd = shlex.split(raw)
+            if cmd and (Path(cmd[0]).is_file() or shutil.which(cmd[0])):
+                return cmd
+    # 2) 常见位置（项目 venv / 用户目录 / 安装目录）
+    for p in _candidate_files():
         if p.is_file():
             return [str(p)]
+    # 3) PATH
     for name in ("mineru", "magic-pdf"):
         path = shutil.which(name)
         if path:
@@ -45,7 +69,7 @@ def available() -> bool:
 
 def version_hint() -> str:
     cmd = find_command()
-    return " ".join(cmd) if cmd else "未安装（pip install -U \"mineru[core]\"）"
+    return " ".join(cmd) if cmd else "未检测到（可选）"
 
 
 def _build_args(cmd: list[str], pdf: Path, out: Path, device: str,
@@ -80,10 +104,12 @@ def convert(pdf_path: str | Path, out_dir: str | Path, device: str | None = None
     cmd = find_command()
     if not cmd:
         raise RuntimeError(
-            "未检测到 MinerU。请先安装：\n"
+            "未检测到 MinerU。\n"
+            "方式一（已安装）：在界面选择 MinerU 后端，点「定位 MinerU…」选到 mineru.exe。\n"
+            "方式二（新安装）：\n"
             "  python -m venv .venvs/mineru\n"
             "  .venvs/mineru/Scripts/python -m pip install -U \"mineru[core]\"\n"
-            "并在设置里选择 MinerU 后端；首次运行需下载模型（可设 MINERU_MODEL_SOURCE=modelscope）。")
+            "首次运行需下载模型（可设 MINERU_MODEL_SOURCE=modelscope）。")
 
     pdf = Path(pdf_path)
     out = Path(out_dir)

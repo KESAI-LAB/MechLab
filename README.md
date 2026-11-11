@@ -123,6 +123,7 @@ powershell -ExecutionPolicy Bypass -File scripts/setup_mineru.ps1
 ```
 
 装到独立 venv（`.venvs/mineru`）并下载模型（约 3.5 GB）；程序会自动检测。
+如果 MinerU 装在别处（或你用的是安装版），在界面选择 MinerU 后端后点「定位 MinerU…」选到 `mineru.exe` 即可，路径会保存。
 
 ### DeepSeek 网页自动化
 

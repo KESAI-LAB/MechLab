@@ -73,7 +73,7 @@ class PapersPage(BaseModule):
         self.backend_cb.pack(side="left", padx=6)
         self.backend_cb.bind("<<ComboboxSelected>>", self._on_backend_change)
         self.mineru_label = ttk.Label(opt, text="", foreground="#6b7280")
-        self.mineru_label.pack(side="left", padx=10)
+        self.mineru_btn = ttk.Button(opt, text="定位 MinerU…", command=self._pick_mineru)
         self._update_backend_hint()
 
         body = ttk.Frame(self)
@@ -226,11 +226,31 @@ class PapersPage(BaseModule):
         self._update_backend_hint()
 
     def _update_backend_hint(self) -> None:
+        # 只有选了 MinerU 后端才显示状态；用 PyMuPDF 时不打扰
+        if self._backend_key() != "mineru":
+            self.mineru_label.pack_forget()
+            self.mineru_btn.pack_forget()
+            return
+        self.mineru_label.pack(side="left", padx=(10, 4))
         if mineru_available():
             self.mineru_label.config(text="MinerU：已检测到 ✓", foreground="#0a6")
+            self.mineru_btn.pack_forget()
         else:
-            self.mineru_label.config(
-                text='MinerU：未安装（pip install -U "mineru[core]"）', foreground="#b45309")
+            self.mineru_label.config(text="MinerU：未检测到（可选）", foreground="#6b7280")
+            self.mineru_btn.pack(side="left", padx=(0, 6))
+
+    def _pick_mineru(self) -> None:
+        path = filedialog.askopenfilename(
+            parent=self, title="选择 mineru.exe",
+            filetypes=[("mineru", "mineru.exe"), ("可执行文件", "*.exe"), ("所有文件", "*.*")])
+        if not path:
+            return
+        settings.set_value("mineru_cmd", path)
+        self._update_backend_hint()
+        if mineru_available():
+            messagebox.showinfo("MinerU", "已保存路径，MinerU 可用", parent=self)
+        else:
+            messagebox.showwarning("MinerU", "这个文件不是可用的 mineru 命令", parent=self)
 
     # ------------------------------------------------------------------ 转换
     def convert_selected(self) -> None:

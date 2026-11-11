@@ -11,6 +11,7 @@ SETTINGS_FILE = DATA_ROOT / "settings.json"
 DEFAULTS = {
     "pdf_backend": "pymupdf4llm",     # pymupdf4llm | mineru
     "mineru_device": "cpu",           # cpu | cuda
+    "mineru_cmd": "",                 # 可选：mineru 可执行文件路径
 }
 
 
