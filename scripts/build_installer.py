@@ -42,7 +42,12 @@ def copy_runtime_files() -> None:
         if dst.exists():
             shutil.rmtree(dst)
         shutil.copytree(src, dst,
-                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.log"))
+                        ignore=shutil.ignore_patterns(
+                            "__pycache__", "*.pyc", "*.log",
+                            # 真实机器配置决不打进安装包（模板 *.example.sh 保留）
+                            "env_oldA.sh", "env_evior.sh",
+                            "machines.json", "jobs.json", "jobs.tmp", ".runs",
+                        ))
     for name in EXTRA_FILES:
         src = ROOT / name
         if src.is_file():

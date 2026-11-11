@@ -66,13 +66,14 @@ MACHINES: dict[str, Machine] = {
         supports_boundary=True, note="本机 COMSOL（需按本机路径配置）",
     ),
     "A": Machine(
-        key="A", label="A 机 (30 核)", cores=30, backend="RemoteA",
-        supports_boundary=True, note="远程机 A（示例，需配置 env_oldA.sh）",
+        key="A", label="远程 A（示例）", cores=30, backend="RemoteA",
+        supports_boundary=True,
+        note="示例槽位：把自己的主机写进 engine/remote/env_oldA.sh",
     ),
     "E": Machine(
-        key="E", label="E 机 (22 核)", cores=22, backend="RemoteE",
+        key="E", label="远程 E（示例）", cores=22, backend="RemoteE",
         supports_boundary=False,
-        note="远程机 E（示例，需配置 env_evior.sh；不支持 @b 边界探针）",
+        note="示例槽位：把自己的主机写进 engine/remote/env_evior.sh；不支持 @b 边界探针",
     ),
     "M": Machine(
         key="M", label="M 演示模式（Mock）", cores=1, backend="MockBackend",

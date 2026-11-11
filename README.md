@@ -98,13 +98,16 @@ MechLab/
 
 ### 远程机器（A/E 机或自建）
 
-复制模板并填写（真实文件已被 `.gitignore` 排除）：
+界面里的「远程 A（示例）」「远程 E（示例）」只是示例槽位，**不会连接任何机器**；需要用你自己的主机：
+- 方式一：复制模板并填写（真实文件已被 `.gitignore` 排除）：
 
 ```bash
 cp engine/remote/env_oldA.example.sh engine/remote/env_oldA.sh
 cp engine/remote/env_evior.example.sh engine/remote/env_evior.sh
 # 编辑 RG_HOST / RG_KEY / RG_PORT / RG_BASE_WIN / RG_BATCH / RG_COMPILE
 ```
+
+- 方式二：完全不用示例槽位，直接在界面点「＋ 接入新机」，填写自己的机器信息（保存到本机 `machines.json`）。
 
 要求目标机：Windows + OpenSSH Server + COMSOL（批处理可用）+ 可写目录 + 密钥登录。
 
