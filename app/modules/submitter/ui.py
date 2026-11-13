@@ -168,6 +168,7 @@ class SubmitterPage(BaseModule):
         ttk.Button(bar, text="▶▶ 提交全部", command=self.submit_all).pack(side="left", padx=4)
         ttk.Button(bar, text="■ 中止选中", command=self.cancel_selected).pack(side="left", padx=(14, 4))
         ttk.Button(bar, text="✕ 移除选中", command=self.remove_selected).pack(side="left", padx=4)
+        ttk.Button(bar, text="🗑 全部移除", command=self.remove_all).pack(side="left", padx=4)
         ttk.Button(bar, text="清空已完成", command=self.clear_finished).pack(side="left", padx=4)
         ttk.Button(bar, text="🔌 测试连接", command=self.probe).pack(side="left", padx=(14, 4))
         ttk.Button(bar, text="🩺 机器健康", command=lambda: open_machine_health(self, self.manager)).pack(
@@ -376,6 +377,19 @@ class SubmitterPage(BaseModule):
         for jid in list(self.tree.selection()):
             self.manager.remove(jid)
         self.selected = None
+        self.refresh()
+
+    def remove_all(self):
+        if not messagebox.askyesno(
+                "全部移除", "移除所有任务？\n运行中的任务会保留，不会打断求解。",
+                parent=self.root):
+            return
+        removed, kept = self.manager.remove_all()
+        self.selected = None
+        msg = f"已移除 {removed} 个任务"
+        if kept:
+            msg += f"；{kept} 个运行中任务保留"
+        self.status_var.set(msg)
         self.refresh()
 
     def clear_finished(self):

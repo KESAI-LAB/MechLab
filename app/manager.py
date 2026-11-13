@@ -250,6 +250,24 @@ class Manager:
             if j.status in ("done", "failed", "cancelled", "interrupted"):
                 self.remove(j.id)
 
+    def remove_all(self) -> tuple[int, int]:
+        """移除所有非运行中任务并清空队列；返回 (移除数, 保留运行中数)。"""
+        with self._lock:
+            ids = [jid for jid, j in self.jobs.items() if j.status != "running"]
+            kept = sum(1 for j in self.jobs.values() if j.status == "running")
+            for jid in ids:
+                self.jobs.pop(jid, None)
+            for q in self.queues.values():
+                q[:] = []
+            self._save()
+        for jid in ids:
+            try:
+                self.log_path(jid).unlink(missing_ok=True)
+            except Exception:  # noqa: BLE001
+                pass
+            self.events.put(("removed", jid))
+        return len(ids), kept
+
     # ------------------------------------------------------------------ 进度
     # COMSOL 批处理日志里的求解表行：  Step   Time   Stepsize ...
     _STEP_RE = re.compile(r"^\s{0,4}(\d+)\s+([-+]?[0-9]*\.?[0-9]+(?:[eE][-+]?\d+)?)\s+([-+0-9.eE]+)")
