@@ -40,6 +40,7 @@ class Job:
     started: float = 0.0
     ended: float = 0.0
     exit_code: Optional[int] = None
+    error: str = ""              # 失败原因摘要（失败时填）
 
     @property
     def elapsed(self) -> float:
@@ -51,6 +52,44 @@ class Job:
 
     def describe(self) -> str:
         return f"{Path(self.model).name} · {self.tag}"
+
+
+_ERR_RE = re.compile(
+    r"(error|exception|failed|failure|失败|错误|异常|license|许可证|"
+    r"out of memory|内存不足|segmentation|segfault|terminated|aborted|"
+    r"no such file|not found|permission denied|connection refused|"
+    r"timed out|timeout|unable to|cannot|无法|未找到)",
+    re.IGNORECASE,
+)
+
+
+def _read_log_tail(path: Path, max_lines: int = 80) -> list[str]:
+    """读日志末尾（最多 64 KB / 80 行），用于提取错误摘要。"""
+    try:
+        data = path.read_bytes()[-64 * 1024:]
+    except OSError:
+        return []
+    lines = data.decode("utf-8", errors="replace").splitlines()
+    return [line.rstrip() for line in lines if line.strip()]
+
+
+def summarize_log(path: Path, exit_code: Optional[int] = None) -> str:
+    """从日志末尾找最可能的错误行；找不到就取最后一行。"""
+    lines = _read_log_tail(path)
+    hits = [line.strip() for line in lines
+            if _ERR_RE.search(line) and not line.lstrip().startswith("#")]
+    if hits:
+        return " | ".join(hits[-2:])[:220]
+    tail = [line.strip() for line in lines[-6:]
+            if not line.lstrip().startswith("#")]
+    if tail:
+        return tail[-1][:220]
+    return f"exit {exit_code}" if exit_code is not None else "失败（无日志）"
+
+
+def log_tail_detail(path: Path, max_lines: int = 5) -> str:
+    lines = _read_log_tail(path)
+    return "\n".join(line.strip()[:140] for line in lines[-max_lines:])
 
 
 class Manager:
@@ -344,8 +383,11 @@ class Manager:
             on_line(f"[manager] 启动失败：{exc}")
             j.status = "failed"
             j.ended = time.time()
+            j.error = f"启动失败：{exc}"
+            with self._lock:
+                self._save()
             self.events.put(("changed", j.id))
-            notify_job(j, MACHINES[mkey].label, "failed")
+            notify_job(j, MACHINES[mkey].label, "failed", j.error)
             return
 
         # 只以 runner 发出的 ("done", code) 事件作为结束信号；
@@ -368,10 +410,13 @@ class Manager:
             pass
         elif code == 0:
             j.status = "done"
+            j.error = ""
         else:
             j.status = "failed"
+            j.error = summarize_log(log, code)
+        detail = "日志尾部：\n" + log_tail_detail(log) if j.status == "failed" else ""
         self.runners.pop(mkey, None)
         with self._lock:
             self._save()
         self.events.put(("changed", j.id))
-        notify_job(j, MACHINES[mkey].label, j.status)
+        notify_job(j, MACHINES[mkey].label, j.status, detail)

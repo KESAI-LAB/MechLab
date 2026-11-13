@@ -24,6 +24,7 @@ from ...manager import Manager
 from ...runner import CREATE_NO_WINDOW, find_bash
 from ... import machines as machines_mod
 from ...machine_ui import open_machine_setup
+from ...machine_health import open_machine_health
 from ...notify_ui import open_notify_settings
 from ..base import BaseModule
 
@@ -137,12 +138,14 @@ class SubmitterPage(BaseModule):
         # --- 右：任务表 ---
         right = ttk.LabelFrame(mid, text="任务队列（待提交 → 排队 → 运行）")
         right.grid(row=0, column=1, sticky="nsew")
-        cols = ("id", "machine", "model", "tag", "cores", "study", "save", "status", "progress", "elapsed")
+        cols = ("id", "machine", "model", "tag", "cores", "study", "save", "status", "err", "progress", "elapsed")
         self.tree = ttk.Treeview(right, columns=cols, show="headings", height=10, selectmode="extended")
         heads = {"id": "ID", "machine": "机器", "model": "模型", "tag": "标签", "cores": "核数",
-                 "study": "研究步", "save": "存解", "status": "状态", "progress": "进度", "elapsed": "用时"}
-        widths = {"id": 66, "machine": 62, "model": 250, "tag": 96, "cores": 44,
-                  "study": 70, "save": 40, "status": 76, "progress": 200, "elapsed": 62}
+                 "study": "研究步", "save": "存解", "status": "状态", "err": "错误摘要",
+                 "progress": "进度", "elapsed": "用时"}
+        widths = {"id": 66, "machine": 62, "model": 220, "tag": 84, "cores": 44,
+                  "study": 70, "save": 40, "status": 76, "err": 200,
+                  "progress": 160, "elapsed": 62}
         for c in cols:
             self.tree.heading(c, text=heads[c])
             self.tree.column(c, width=widths[c], anchor="w")
@@ -167,6 +170,8 @@ class SubmitterPage(BaseModule):
         ttk.Button(bar, text="✕ 移除选中", command=self.remove_selected).pack(side="left", padx=4)
         ttk.Button(bar, text="清空已完成", command=self.clear_finished).pack(side="left", padx=4)
         ttk.Button(bar, text="🔌 测试连接", command=self.probe).pack(side="left", padx=(14, 4))
+        ttk.Button(bar, text="🩺 机器健康", command=lambda: open_machine_health(self, self.manager)).pack(
+            side="left", padx=4)
         ttk.Button(bar, text="🔔 通知", command=lambda: open_notify_settings(self)).pack(
             side="left", padx=4)
         ttk.Button(bar, text="📈 一键画图（演示）", command=self.plot_demo).pack(side="left", padx=4)
@@ -462,6 +467,7 @@ class SubmitterPage(BaseModule):
                     j.tag, j.cores, j.study or "全部",
                     "是" if j.save_solution else "",
                     STATUS_TXT.get(j.status, j.status),
+                    (j.error[:70] if j.status == "failed" and j.error else ""),
                     prog if j.status == "running" else "",
                     f"{int(j.elapsed)} s" if j.elapsed else "")
             tags = ("stalled",) if stalled else (j.status,)

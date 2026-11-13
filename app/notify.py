@@ -117,7 +117,7 @@ def _fmt_elapsed(seconds: float) -> str:
     return f"{hours}h{minutes:02d}m"
 
 
-def notify_job(job, machine_label: str, status: str) -> None:
+def notify_job(job, machine_label: str, status: str, detail: str = "") -> None:
     """任务结束回调：按配置异步推送。job 为 manager.Job。"""
     cfg = load()
     if not cfg.get("enabled", True):
@@ -135,7 +135,12 @@ def notify_job(job, machine_label: str, status: str) -> None:
         f"耗时 {_fmt_elapsed(job.elapsed)}" +
         (f" · exit {job.exit_code}" if job.exit_code is not None else ""),
     ]
-    send_async(title, "\n".join(lines), cfg)
+    if getattr(job, "error", ""):
+        lines.append("原因：" + str(job.error)[:200])
+    body = "\n".join(lines)
+    if detail:
+        body += "\n\n" + detail.strip()
+    send_async(title, body[:1000], cfg)
 
 
 def test(cfg: dict | None = None) -> bool:
