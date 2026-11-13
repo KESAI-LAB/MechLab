@@ -26,6 +26,18 @@ MechLab 把两类重复劳动自动化：
 - **失败原因摘要**：失败任务自动从日志末尾抓错误行，显示在任务表「错误摘要」列，并随 Bark 通知附带最后几行日志。
 - **机器健康面板**：一键并发检查各机器在线状态、COMSOL 是否可用、响应延迟、**CPU/线程、内存、C 盘剩余、负载**、当前队列（界面「🩺 机器健康」，30 秒自动刷新；远程机器联网时自动带回硬件信息）。
 
+### MOOSE 提交模块（WSL 本地）
+
+界面里的「MOOSE 提交」标签页（在 COMSOL 后面）：
+
+- 选择 WSL 发行版（默认 `Ubuntu-24.04`）、MOOSE App（如 `~/moose/modules/phase_field/phase_field-opt`）、`.i` 输入文件；
+- 工作目录默认取输入文件所在目录（`.i` 引用的网格文件要放同目录）；
+- 支持串行 / 自定义 MPI 命令（如 `mpiexec -n 8`）、`--n-threads`、环境命令、额外参数；
+- 队列、日志、进度、中止、Bark 通知、失败摘要全部复用；
+- 运行结束后自动检测工作目录里新生成的 CSV。
+
+> 注意：MOOSE 的 `-i` 不接受含空格的路径（会被它按空白拆开），所以模块会先 `cd` 到工作目录、再用文件名调用；请保证工作目录里同时有 `.i` 和它引用的网格文件。
+
 ### 文献 → 报告模块
 
 - **PDF → Markdown**：内置 PyMuPDF4LLM（快）；可选 MinerU（公式/表格更强，需本机安装）。
@@ -81,7 +93,8 @@ MechLab/
 │  ├─ theme.py / assets/       # 主题与图标
 │  └─ modules/
 │     ├─ submitter/            # 模块①：COMSOL 提交
-│     └─ papers/               # 模块②：文献→报告
+│     ├─ moose/                # 模块②：MOOSE 提交（WSL）
+│     └─ papers/               # 模块③：文献→报告
 │        ├─ pdf2md/            #   PDF→Markdown（pymupdf4llm / mineru）
 │        ├─ web.py             #   DeepSeek 网页自动化
 │        ├─ report.py          #   抽取 → 理论报告 → 实现报告

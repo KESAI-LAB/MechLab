@@ -51,10 +51,11 @@ def build(root: tk.Tk) -> list:
     notebook = ttk.Notebook(root)
     notebook.pack(fill="both", expand=True, padx=8, pady=8)
 
+    from .modules.moose.ui import MoosePage
     from .modules.papers.ui import PapersPage
     from .modules.submitter.ui import SubmitterPage
 
-    pages = [SubmitterPage(notebook), PapersPage(notebook)]
+    pages = [SubmitterPage(notebook), MoosePage(notebook), PapersPage(notebook)]
     for page in pages:
         notebook.add(page, text=page.title)
 

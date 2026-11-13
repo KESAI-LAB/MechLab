@@ -73,3 +73,5 @@ tests/_test_k*
 data/notify.json
 
 installer_log*.txt
+
+data/moose.json
