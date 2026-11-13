@@ -5,12 +5,15 @@
 这是可选模块：
 - 删除本文件；
 - 在 `app/modules/moose/ui.py` 里删除顶部 `from .cloud_view import ...` 的
-  try/except 段，以及按钮区 `if open_cloud_view:` 那一段即可。
+  try/except 段、`if open_exodus_view is not None: self._build_results_panel(...)`
+  那一行，以及 `_build_results_panel/_scan_results/choose_exodus/plot_result/
+  open_result_dir/remove_result` 这组方法（还有工具栏「🖼 云图」按钮段）。
 其余代码不依赖本模块。
 """
 from __future__ import annotations
 
 import os
+import re
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -115,13 +118,12 @@ def render(exodus: Path, var: str, out_png: Path,
     return out_png
 
 
+def _safe_stem(text: str) -> str:
+    return re.sub(r'[\\/:*?"<>|]+', "_", (text or "result").strip()) or "result"
+
+
 def open_cloud_view(parent, job: MooseJob) -> None:
-    """弹出云图对话框：选变量 → 生成 PNG → 预览/另存/打开。"""
-    if _pv() is None:
-        messagebox.showwarning(
-            "云图", "未安装 pyvista，无法出图。\n可在命令行执行：\n  pip install pyvista",
-            parent=parent)
-        return
+    """按任务找最新 *_out.e，然后打开画图对话框。"""
     exodus = find_exodus(job)
     if exodus is None:
         messagebox.showwarning(
@@ -129,6 +131,16 @@ def open_cloud_view(parent, job: MooseJob) -> None:
             "没找到 *_out.e 结果文件。\n\n"
             "MOOSE 需要开启 Exodus 输出（[Outputs] 里 exodus = true），"
             "并且任务目录里要有 .e 文件。",
+            parent=parent)
+        return
+    open_exodus_view(parent, exodus)
+
+
+def open_exodus_view(parent, exodus: Path) -> None:
+    """直接对某个 .e 文件打开画图对话框：选变量 → 生成 PNG → 预览/另存/打开。"""
+    if _pv() is None:
+        messagebox.showwarning(
+            "云图", "未安装 pyvista，无法出图。\n可在命令行执行：\n  pip install pyvista",
             parent=parent)
         return
     try:
@@ -197,7 +209,7 @@ def open_cloud_view(parent, job: MooseJob) -> None:
         info.set("正在渲染…")
         selected = var.get()
         selected_cmap = cmap.get() or "viridis"
-        out = VIEW_DIR / f"{job.id}_{selected}.png"
+        out = VIEW_DIR / f"{_safe_stem(exodus.stem)}_{_safe_stem(selected)}.png"
         state["png"] = out
 
         def work():

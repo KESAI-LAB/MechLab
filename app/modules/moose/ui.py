@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import posixpath
+import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
@@ -12,11 +13,14 @@ from .runner import (LOG_DIR, STATUS_COLOR, STATUS_TXT, MooseJob, MooseManager,
                      default_distro, load_settings, new_job_id, resolve_path,
                      save_settings, to_wsl_path, wsl_test)
 
-# ---- 可选模块：云图（删 cloud_view.py + 本段 + 按钮段即可移除）----
+# ---- 可选模块：云图 / 结果文件列表（删 cloud_view.py + 本段 + 面板段即可移除）----
 try:
-    from .cloud_view import open_cloud_view
+    from . import cloud_view
+    from .cloud_view import open_cloud_view, open_exodus_view
 except Exception:  # noqa: BLE001
+    cloud_view = None
     open_cloud_view = None
+    open_exodus_view = None
 
 #: 常用 MOOSE 参数（下拉菜单里点一下自动追加）
 EXTRA_PRESETS = [
@@ -42,7 +46,12 @@ class MoosePage(BaseModule):
         self._selected: str | None = None
         self._log_sig: tuple | None = None
         self._settings = load_settings()
+        self._results: dict[str, str] = {}      # .e 路径 -> 来源
+        self._manual_results: set[str] = set()  # 手动选择的 .e
+        self._last_scan = 0.0
+        self.results_tree: ttk.Treeview | None = None
         self._build_ui()
+        self._scan_results(force=True)
         self.after(700, self._poll)
 
     # ------------------------------------------------------------------ UI
@@ -55,7 +64,7 @@ class MoosePage(BaseModule):
         form = ttk.LabelFrame(self, text="MOOSE 任务（WSL 本地）")
         form.grid(row=0, column=0, sticky="ew", **pad)
         form.columnconfigure(1, weight=1)
-        form.columnconfigure(4, weight=1)
+        form.columnconfigure(3, weight=1)
 
         distro = self._settings.get("distro") or default_distro()
         ttk.Label(form, text="WSL 发行版").grid(row=0, column=0, sticky="w", padx=4, pady=3)
@@ -66,14 +75,14 @@ class MoosePage(BaseModule):
         ttk.Label(form, text="MOOSE App").grid(row=0, column=2, sticky="e", padx=(12, 4), pady=3)
         self.app_var = tk.StringVar(value=self._settings.get("app", ""))
         ttk.Entry(form, textvariable=self.app_var).grid(
-            row=0, column=3, columnspan=3, sticky="ew", padx=4, pady=3)
+            row=0, column=3, sticky="ew", padx=4, pady=3)
 
         ttk.Label(form, text="输入文件 .i").grid(row=1, column=0, sticky="w", padx=4, pady=3)
         self.input_var = tk.StringVar()
         ttk.Entry(form, textvariable=self.input_var).grid(
-            row=1, column=1, columnspan=3, sticky="ew", padx=4, pady=3)
+            row=1, column=1, columnspan=2, sticky="ew", padx=4, pady=3)
         ttk.Button(form, text="浏览…", command=self.browse_input).grid(
-            row=1, column=4, sticky="w", padx=4, pady=3)
+            row=1, column=3, sticky="w", padx=4, pady=3)
 
         ttk.Label(form, text="工作目录").grid(row=2, column=0, sticky="w", padx=4, pady=3)
         self.workdir_var = tk.StringVar()
@@ -84,8 +93,8 @@ class MoosePage(BaseModule):
         self.mpi_var = tk.StringVar(value=self._settings.get("mpi_cmd", ""))
         ttk.Entry(form, textvariable=self.mpi_var).grid(
             row=3, column=1, sticky="ew", padx=4, pady=3)
-        ttk.Label(form, text="（留空=串行；有 mpiexec 可填 mpiexec -n 8）",
-                  foreground="#6b7280").grid(row=3, column=2, columnspan=2, sticky="w")
+        ttk.Label(form, text="留空=串行", foreground="#6b7280").grid(
+            row=3, column=2, columnspan=2, sticky="w")
 
         ttk.Label(form, text="线程数").grid(row=4, column=0, sticky="w", padx=4, pady=3)
         self.threads_var = tk.StringVar(value=str(self._settings.get("threads", 1)))
@@ -94,7 +103,7 @@ class MoosePage(BaseModule):
         ttk.Label(form, text="环境命令").grid(row=4, column=2, sticky="e", padx=(12, 4), pady=3)
         self.env_var = tk.StringVar(value=self._settings.get("env_cmd", ""))
         ttk.Entry(form, textvariable=self.env_var).grid(
-            row=4, column=3, columnspan=2, sticky="ew", padx=4, pady=3)
+            row=4, column=3, sticky="ew", padx=4, pady=3)
 
         ttk.Label(form, text="额外参数").grid(row=5, column=0, sticky="w", padx=4, pady=3)
         extra_wrap = ttk.Frame(form)
@@ -116,6 +125,9 @@ class MoosePage(BaseModule):
         self.tag_var = tk.StringVar()
         ttk.Entry(form, textvariable=self.tag_var, width=18).grid(
             row=5, column=3, sticky="w", padx=4, pady=3)
+        ttk.Label(form, text="MPI 命令留空=串行；装了 mpiexec 可填 mpiexec -n 8",
+                  foreground="#6b7280").grid(
+            row=6, column=0, columnspan=4, sticky="w", padx=4, pady=(0, 4))
 
         btns = ttk.Frame(self)
         btns.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 4))
@@ -130,8 +142,14 @@ class MoosePage(BaseModule):
         self.status_var = tk.StringVar(value="就绪：选择 .i 文件后提交")
         ttk.Label(btns, textvariable=self.status_var, foreground="#0a6").pack(side="right", padx=8)
 
-        table = ttk.LabelFrame(self, text="任务队列（排队 → 运行 → 完成）")
-        table.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 6))
+        content = ttk.Frame(self)
+        content.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 6))
+        content.rowconfigure(0, weight=1)
+        content.columnconfigure(0, weight=1)
+        content.columnconfigure(1, weight=0)
+
+        table = ttk.LabelFrame(content, text="任务队列（排队 → 运行 → 完成）")
+        table.grid(row=0, column=0, sticky="nsew")
         table.rowconfigure(0, weight=1)
         table.columnconfigure(0, weight=1)
         cols = ("id", "input", "status", "progress", "elapsed", "outputs", "error")
@@ -139,8 +157,8 @@ class MoosePage(BaseModule):
                                  selectmode="browse")
         heads = {"id": "ID", "input": "输入文件", "status": "状态", "progress": "进度",
                  "elapsed": "耗时", "outputs": "输出 CSV", "error": "错误摘要"}
-        widths = {"id": 66, "input": 260, "status": 76, "progress": 230,
-                  "elapsed": 66, "outputs": 150, "error": 260}
+        widths = {"id": 55, "input": 190, "status": 60, "progress": 170,
+                  "elapsed": 50, "outputs": 100, "error": 190}
         for c in cols:
             self.tree.heading(c, text=heads[c])
             self.tree.column(c, width=widths[c], anchor="w")
@@ -151,6 +169,9 @@ class MoosePage(BaseModule):
         self.tree.bind("<<TreeviewSelect>>", self.on_select)
         for status, color in STATUS_COLOR.items():
             self.tree.tag_configure(status, foreground=color)
+
+        if open_exodus_view is not None:
+            self._build_results_panel(content)
 
         logf = ttk.LabelFrame(self, text="日志（选中任务）")
         logf.grid(row=3, column=0, sticky="nsew", padx=10, pady=(0, 10))
@@ -164,6 +185,105 @@ class MoosePage(BaseModule):
         self.log_text.grid(row=0, column=0, sticky="nsew")
         lys.grid(row=0, column=1, sticky="ns")
         lxs.grid(row=1, column=0, sticky="ew")
+
+    # ---- 可选：结果文件列表 + 画图（删本段即可移除） ----
+    def _build_results_panel(self, parent) -> None:
+        box = ttk.LabelFrame(parent, text="结果文件（.e · 画图）")
+        box.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+        box.rowconfigure(0, weight=1)
+        box.columnconfigure(0, weight=1)
+        self.results_tree = ttk.Treeview(box, columns=("file", "src"),
+                                         show="headings", height=8, selectmode="browse")
+        self.results_tree.heading("file", text="文件")
+        self.results_tree.heading("src", text="来源")
+        self.results_tree.column("file", width=150, anchor="w")
+        self.results_tree.column("src", width=55, anchor="w")
+        ys = ttk.Scrollbar(box, orient="vertical", command=self.results_tree.yview)
+        self.results_tree.configure(yscrollcommand=ys.set)
+        self.results_tree.grid(row=0, column=0, sticky="nsew")
+        ys.grid(row=0, column=1, sticky="ns")
+        self.results_tree.bind("<Double-1>", lambda *_: self.plot_result())
+        btns = ttk.Frame(box)
+        btns.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        ttk.Button(btns, text="选择 .e…", command=self.choose_exodus).pack(side="left")
+        ttk.Button(btns, text="🖼 画图", command=self.plot_result).pack(side="left", padx=4)
+        ttk.Button(btns, text="打开目录", command=self.open_result_dir).pack(side="left", padx=4)
+        ttk.Button(btns, text="移除", command=self.remove_result).pack(side="left", padx=4)
+
+    def _scan_results(self, force: bool = False) -> None:
+        if self.results_tree is None or cloud_view is None:
+            return
+        now = time.time()
+        if not force and now - self._last_scan < 2.0:
+            return
+        self._last_scan = now
+        found: dict[str, str] = {}
+        for j in self.manager.jobs.values():
+            if j.status not in ("done", "failed"):
+                continue
+            try:
+                exo = cloud_view.find_exodus(j)
+            except Exception:  # noqa: BLE001
+                exo = None
+            if exo is not None:
+                found[str(exo)] = j.tag or j.id
+        for path in self._manual_results:
+            found.setdefault(path, "手动")
+        for iid in list(self.results_tree.get_children()):
+            if iid not in found and iid not in self._manual_results:
+                self.results_tree.delete(iid)
+        for path, src in found.items():
+            name = Path(path).name
+            if self.results_tree.exists(path):
+                self.results_tree.item(path, values=(name, src))
+            else:
+                self.results_tree.insert("", "end", iid=path, values=(name, src))
+        self._results = found
+
+    def _result_path(self) -> Path | None:
+        if self.results_tree is None:
+            return None
+        sel = self.results_tree.selection()
+        return Path(sel[0]) if sel else None
+
+    def choose_exodus(self) -> None:
+        path = filedialog.askopenfilename(
+            parent=self, title="选择 Exodus 结果文件（.e）",
+            filetypes=[("Exodus", "*.e"), ("所有文件", "*.*")])
+        if not path:
+            return
+        self._manual_results.add(path)
+        self._scan_results(force=True)
+        if self.results_tree is not None and self.results_tree.exists(path):
+            self.results_tree.selection_set(path)
+            self.results_tree.see(path)
+
+    def plot_result(self) -> None:
+        path = self._result_path()
+        if path is None:
+            messagebox.showinfo("云图", "先在右侧结果列表里选一个 .e 文件", parent=self)
+            return
+        if not path.is_file():
+            messagebox.showwarning("云图", f"文件不存在：\n{path}", parent=self)
+            return
+        if open_exodus_view is not None:
+            open_exodus_view(self, path)
+
+    def open_result_dir(self) -> None:
+        path = self._result_path()
+        if path is not None:
+            try:
+                os.startfile(str(path.parent))  # noqa: S606
+            except Exception:  # noqa: BLE001
+                pass
+
+    def remove_result(self) -> None:
+        path = self._result_path()
+        if path is None:
+            return
+        self._manual_results.discard(str(path))
+        if self.results_tree is not None and self.results_tree.exists(str(path)):
+            self.results_tree.delete(str(path))
 
     def _append_extra(self, flag: str) -> None:
         cur = self.extra_var.get().strip()
@@ -296,6 +416,7 @@ class MoosePage(BaseModule):
     def _poll(self) -> None:
         try:
             self.refresh()
+            self._scan_results()
             self._show_log()
         finally:
             self.after(700, self._poll)
