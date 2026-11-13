@@ -126,6 +126,16 @@ powershell -ExecutionPolicy Bypass -File scripts/setup_mineru.ps1
 装到独立 venv（`.venvs/mineru`）并下载模型（约 3.5 GB）；程序会自动检测。
 如果 MinerU 装在别处，可设置环境变量 `MINERU_CMD` 指向 `mineru.exe`（或 `mineru` 命令）。
 
+### 任务通知（Bark，iPhone）
+
+任务完成/失败时推送到手机（Bark App）：
+
+1. iPhone 安装 Bark，复制设备 Key（形如 `https://api.day.app/<Key>/...` 里的 Key）；
+2. 界面提交页点「🔔 通知」，填入 Key，点「测试」确认能收到；
+3. 按需勾选「完成时通知 / 失败时通知」，保存即可。
+
+配置保存在本机 `data/notify.json`（已 gitignore，不会进仓库/安装包）。通知内容包含：模型名、机器、标签、核数、耗时、exit code；发送在后台线程，失败重试 3 次，不影响求解任务。
+
 ### DeepSeek 网页自动化
 
 - 需要本机安装 **Chrome**（程序用专用 profile 启动，不影响日常浏览器）；
