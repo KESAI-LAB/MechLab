@@ -22,6 +22,7 @@ MechLab 把两类重复劳动自动化：
 - **SSH 启动脚本**：目标机没开 OpenSSH 时，生成管理员脚本（安装/启动/放行端口/写公钥）。
 - **Mock 演示模式**：低碳钢单轴拉伸，约 15 秒生成应力-应变 CSV / 曲线图 / 摘要，适合演示与验收。
 - **一键画图**：只针对演示数据，窗口内直接画应力-应变与载荷-位移。
+- **任务通知**：任务完成/失败时通过 Bark 推送到 iPhone；界面「🔔 通知」里填 Bark Key 即可，配置存本地 `data/notify.json`（已 gitignore）。
 
 ### 文献 → 报告模块
 
@@ -123,7 +124,7 @@ powershell -ExecutionPolicy Bypass -File scripts/setup_mineru.ps1
 ```
 
 装到独立 venv（`.venvs/mineru`）并下载模型（约 3.5 GB）；程序会自动检测。
-如果 MinerU 装在别处（或你用的是安装版），在界面选择 MinerU 后端后点「定位 MinerU…」选到 `mineru.exe` 即可，路径会保存。
+如果 MinerU 装在别处，可设置环境变量 `MINERU_CMD` 指向 `mineru.exe`（或 `mineru` 命令）。
 
 ### DeepSeek 网页自动化
 

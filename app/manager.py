@@ -21,6 +21,7 @@ from typing import Optional
 
 from .backends import Backend, Job as JobInput, get_backend
 from .config import JOBS_FILE, LOG_DIR, MACHINES, REPO
+from .notify import notify_job
 from .runner import ProcessRunner, find_bash
 
 
@@ -344,6 +345,7 @@ class Manager:
             j.status = "failed"
             j.ended = time.time()
             self.events.put(("changed", j.id))
+            notify_job(j, MACHINES[mkey].label, "failed")
             return
 
         # 只以 runner 发出的 ("done", code) 事件作为结束信号；
@@ -372,3 +374,4 @@ class Manager:
         with self._lock:
             self._save()
         self.events.put(("changed", j.id))
+        notify_job(j, MACHINES[mkey].label, j.status)

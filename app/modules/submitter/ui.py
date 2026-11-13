@@ -24,6 +24,7 @@ from ...manager import Manager
 from ...runner import CREATE_NO_WINDOW, find_bash
 from ... import machines as machines_mod
 from ...machine_ui import open_machine_setup
+from ...notify_ui import open_notify_settings
 from ..base import BaseModule
 
 STATUS_TXT = {
@@ -166,6 +167,8 @@ class SubmitterPage(BaseModule):
         ttk.Button(bar, text="✕ 移除选中", command=self.remove_selected).pack(side="left", padx=4)
         ttk.Button(bar, text="清空已完成", command=self.clear_finished).pack(side="left", padx=4)
         ttk.Button(bar, text="🔌 测试连接", command=self.probe).pack(side="left", padx=(14, 4))
+        ttk.Button(bar, text="🔔 通知", command=lambda: open_notify_settings(self)).pack(
+            side="left", padx=4)
         ttk.Button(bar, text="📈 一键画图（演示）", command=self.plot_demo).pack(side="left", padx=4)
         ttk.Button(bar, text="打开日志目录", command=self.open_logs).pack(side="left", padx=4)
         self.status_var = tk.StringVar(value="就绪")

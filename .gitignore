@@ -69,3 +69,7 @@ setup_debug_out.log
 build_log*.txt
 
 tests/_test_k*
+
+data/notify.json
+
+installer_log*.txt
