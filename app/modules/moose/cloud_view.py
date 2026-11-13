@@ -12,9 +12,13 @@
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import re
+import shutil
+import tempfile
 import threading
+import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -22,7 +26,70 @@ from tkinter import filedialog, messagebox, ttk
 from .runner import LOG_DIR, MooseJob
 
 VIEW_DIR = LOG_DIR / "cloud"
-_META_ARRAYS = {"ElementBlockIds", "Title", "Info_Records", "ObjectId"}
+CACHE_DIR = VIEW_DIR / "cache"
+_META_ARRAYS = {
+    "ElementBlockIds", "Title", "Info_Records", "ObjectId", "QA_Records",
+    "NodeSetIds", "SideSetIds", "EdgeSetIds", "FaceSetIds",
+    "ElemSideSetIds", "GlobalNodeIds", "GlobalElementIds",
+}
+
+
+def _cache_dir() -> Path:
+    """返回纯 ASCII 的可写缓存目录（VTK 不支持非 ASCII 路径）。"""
+    candidates = [CACHE_DIR, Path(tempfile.gettempdir()) / "mechlab_cloud"]
+    for cand in candidates:
+        if all(ord(ch) < 128 for ch in str(cand)):
+            try:
+                cand.mkdir(parents=True, exist_ok=True)
+                return cand
+            except OSError:
+                continue
+    return CACHE_DIR
+
+
+def _ascii_read_path(exodus: Path) -> Path:
+    """VTK/Exodus 不能打开含中文等非 ASCII 的路径，先复制到纯 ASCII 缓存再读。"""
+    if all(ord(ch) < 128 for ch in str(exodus)):
+        return exodus
+    try:
+        st = exodus.stat()
+    except OSError:
+        return exodus
+    cache = _cache_dir()
+    cache.mkdir(parents=True, exist_ok=True)
+    key = hashlib.md5(
+        f"{exodus}|{st.st_mtime_ns}|{st.st_size}".encode("utf-8")).hexdigest()[:16]
+    dst = cache / f"{key}.e"
+    if not dst.is_file() or dst.stat().st_size != st.st_size:
+        shutil.copy2(exodus, dst)
+    try:
+        cutoff = time.time() - 3 * 86400
+        for old in cache.glob("*.e"):
+            if old != dst and old.stat().st_mtime < cutoff:
+                old.unlink(missing_ok=True)
+    except OSError:
+        pass
+    return dst
+
+
+def _iter_grids(data):
+    """递归遍历 PyVista 数据里的所有网格块（Exodus 是嵌套 MultiBlock）。"""
+    try:
+        arrays = getattr(data, "array_names", None)
+        if arrays is not None:
+            yield data
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        keys = list(data.keys())
+    except Exception:  # noqa: BLE001
+        keys = []
+    for key in keys:
+        try:
+            child = data[key]
+        except Exception:  # noqa: BLE001
+            continue
+        yield from _iter_grids(child)
 
 
 def _pv():
@@ -74,7 +141,7 @@ def load_grid(exodus: Path):
     pv = _pv()
     if pv is None:
         raise RuntimeError("未安装 pyvista（pip install pyvista）")
-    data = pv.read(str(exodus))
+    data = pv.read(str(_ascii_read_path(exodus)))
     keys = list(data.keys()) if hasattr(data, "keys") else []
     if "Element Blocks" in keys:
         blocks = data["Element Blocks"]
@@ -85,9 +152,17 @@ def load_grid(exodus: Path):
 
 
 def variables(exodus: Path) -> list[str]:
-    grid = load_grid(exodus)
-    names = list(getattr(grid, "array_names", []) or [])
-    return [n for n in names if n not in _META_ARRAYS]
+    """收集这个 .e 里所有可画的变量（含点/单元数据，过滤元数据）。"""
+    pv = _pv()
+    if pv is None:
+        raise RuntimeError("未安装 pyvista（pip install pyvista）")
+    data = pv.read(str(_ascii_read_path(exodus)))
+    names: list[str] = []
+    for grid in _iter_grids(data):
+        for name in (getattr(grid, "array_names", None) or []):
+            if name not in _META_ARRAYS and name not in names:
+                names.append(name)
+    return names
 
 
 def render(exodus: Path, var: str, out_png: Path,
@@ -97,7 +172,13 @@ def render(exodus: Path, var: str, out_png: Path,
     if pv is None:
         raise RuntimeError("未安装 pyvista（pip install pyvista）")
     grid = load_grid(exodus)
-    if var not in (grid.array_names or []):
+    if var not in (getattr(grid, "array_names", None) or []):
+        grid = None
+        for g in _iter_grids(pv.read(str(_ascii_read_path(exodus)))):
+            if var in (getattr(g, "array_names", None) or []):
+                grid = g
+                break
+    if grid is None:
         raise ValueError(f"变量不存在：{var}")
     out_png.parent.mkdir(parents=True, exist_ok=True)
     pl = pv.Plotter(off_screen=True, window_size=(1100, 760))
@@ -149,7 +230,15 @@ def open_exodus_view(parent, exodus: Path) -> None:
         messagebox.showerror("云图", f"读取 {exodus.name} 失败：\n{exc}", parent=parent)
         return
     if not vars_:
-        messagebox.showwarning("云图", "这个 .e 文件里没有可画的变量。", parent=parent)
+        messagebox.showwarning(
+            "云图",
+            f"{exodus.name} 里没有可画的变量。\n\n"
+            "常见原因：\n"
+            "1. 选到了网格文件（如 mug.e / square.e），不是求解结果；\n"
+            "2. 这个 .e 只有元数据，没有节点/单元变量。\n\n"
+            "请选择 MOOSE 的求解结果 *_out.e（需要 [Outputs] exodus = true）。\n\n"
+            f"文件：{exodus}",
+            parent=parent)
         return
 
     win = tk.Toplevel(parent)
