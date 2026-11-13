@@ -12,6 +12,12 @@ from .runner import (LOG_DIR, STATUS_COLOR, STATUS_TXT, MooseJob, MooseManager,
                      default_distro, load_settings, new_job_id, resolve_path,
                      save_settings, to_wsl_path, wsl_test)
 
+# ---- 可选模块：云图（删 cloud_view.py + 本段 + 按钮段即可移除）----
+try:
+    from .cloud_view import open_cloud_view
+except Exception:  # noqa: BLE001
+    open_cloud_view = None
+
 #: 常用 MOOSE 参数（下拉菜单里点一下自动追加）
 EXTRA_PRESETS = [
     ("--recover", "断点续算"),
@@ -118,6 +124,9 @@ class MoosePage(BaseModule):
         ttk.Button(btns, text="✕ 移除选中", command=self.remove_selected).pack(side="left", padx=4)
         ttk.Button(btns, text="清空已完成", command=self.clear_finished).pack(side="left", padx=4)
         ttk.Button(btns, text="打开日志目录", command=self.open_logs).pack(side="left", padx=(14, 4))
+        # ---- 可选云图按钮（删本段即可移除）----
+        if open_cloud_view is not None:
+            ttk.Button(btns, text="🖼 云图", command=self.show_cloud).pack(side="left", padx=4)
         self.status_var = tk.StringVar(value="就绪：选择 .i 文件后提交")
         ttk.Label(btns, textvariable=self.status_var, foreground="#0a6").pack(side="right", padx=8)
 
@@ -265,6 +274,17 @@ class MoosePage(BaseModule):
             os.startfile(str(LOG_DIR))  # noqa: S606
         except Exception:  # noqa: BLE001
             messagebox.showinfo("日志目录", str(LOG_DIR), parent=self)
+
+    # ---- 可选云图入口（删本方法也可，按钮段已 try/except）----
+    def show_cloud(self) -> None:
+        if open_cloud_view is None:
+            return
+        if not self._selected:
+            messagebox.showinfo("云图", "先在任务列表里选中一个任务", parent=self)
+            return
+        job = self.manager.jobs.get(self._selected)
+        if job is not None:
+            open_cloud_view(self, job)
 
     def on_select(self, *_) -> None:
         sel = self.tree.selection()
