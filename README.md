@@ -32,7 +32,7 @@ MechLab 把两类重复劳动自动化：
 
 - 选择 WSL 发行版（默认 `Ubuntu-24.04`）、MOOSE App（如 `~/moose/modules/phase_field/phase_field-opt`）、`.i` 输入文件；
 - 工作目录默认取输入文件所在目录（`.i` 引用的网格文件要放同目录）；
-- 支持串行 / 自定义 MPI 命令（如 `mpiexec -n 8`）、`--n-threads`、环境命令、额外参数；
+- 支持串行 / 自定义 MPI 命令（如 `mpiexec -n 8`）、`--n-threads`、环境命令；**「常用参数 ▾」下拉可直接勾选** `--recover`、`--mesh-only`、`--check-input`、`--no-color` 等，不用记命令，也可自定义追加；
 - 队列、日志、进度、中止、Bark 通知、失败摘要全部复用；
 - 运行结束后自动检测工作目录里新生成的 CSV。
 

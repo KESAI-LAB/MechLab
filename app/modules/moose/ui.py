@@ -5,12 +5,26 @@ import os
 import posixpath
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from ..base import BaseModule
 from .runner import (LOG_DIR, STATUS_COLOR, STATUS_TXT, MooseJob, MooseManager,
                      default_distro, load_settings, new_job_id, resolve_path,
                      save_settings, to_wsl_path, wsl_test)
+
+#: 常用 MOOSE 参数（下拉菜单里点一下自动追加）
+EXTRA_PRESETS = [
+    ("--recover", "断点续算"),
+    ("--mesh-only", "只生成网格"),
+    ("--check-input", "只检查输入"),
+    ("--show-input", "打印解析后的输入"),
+    ("--error", "警告当错误"),
+    ("--no-color", "关闭彩色输出"),
+    ("--keep-cout", "并行保留各进程输出"),
+    ("--distributed-mesh", "强制分布式网格"),
+    ("--show-outputs", "显示输出耗时"),
+    ("--suppress-header", "不打印 App 头部"),
+]
 
 
 class MoosePage(BaseModule):
@@ -77,9 +91,21 @@ class MoosePage(BaseModule):
             row=4, column=3, columnspan=2, sticky="ew", padx=4, pady=3)
 
         ttk.Label(form, text="额外参数").grid(row=5, column=0, sticky="w", padx=4, pady=3)
+        extra_wrap = ttk.Frame(form)
+        extra_wrap.grid(row=5, column=1, sticky="ew", padx=4, pady=3)
+        extra_wrap.columnconfigure(0, weight=1)
         self.extra_var = tk.StringVar(value=self._settings.get("extra", ""))
-        ttk.Entry(form, textvariable=self.extra_var).grid(
-            row=5, column=1, sticky="ew", padx=4, pady=3)
+        ttk.Entry(extra_wrap, textvariable=self.extra_var).grid(row=0, column=0, sticky="ew")
+        mb = ttk.Menubutton(extra_wrap, text="常用参数 ▾")
+        menu = tk.Menu(mb, tearoff=False)
+        for flag, label in EXTRA_PRESETS:
+            menu.add_command(label=f"{label}（{flag}）",
+                             command=lambda f=flag: self._append_extra(f))
+        menu.add_separator()
+        menu.add_command(label="自定义…", command=self._custom_extra)
+        menu.add_command(label="清空额外参数", command=lambda: self.extra_var.set(""))
+        mb["menu"] = menu
+        mb.grid(row=0, column=1, padx=(6, 0))
         ttk.Label(form, text="标签").grid(row=5, column=2, sticky="e", padx=(12, 4), pady=3)
         self.tag_var = tk.StringVar()
         ttk.Entry(form, textvariable=self.tag_var, width=18).grid(
@@ -130,7 +156,19 @@ class MoosePage(BaseModule):
         lys.grid(row=0, column=1, sticky="ns")
         lxs.grid(row=1, column=0, sticky="ew")
 
-    # ------------------------------------------------------------------ 表单
+    def _append_extra(self, flag: str) -> None:
+        cur = self.extra_var.get().strip()
+        tokens = cur.split()
+        if flag in tokens:
+            return
+        self.extra_var.set((cur + " " + flag).strip())
+
+    def _custom_extra(self) -> None:
+        value = simpledialog.askstring(
+            "额外参数", "输入要追加的 MOOSE 参数（可多个，空格分隔）：", parent=self)
+        if value and value.strip():
+            self._append_extra(value.strip())
+
     def browse_input(self) -> None:
         path = filedialog.askopenfilename(
             parent=self, title="选择 MOOSE 输入文件",

@@ -315,7 +315,8 @@ class MooseManager:
         # 所以先 cd 到工作目录，再用文件名调用。
         parts += ["-i", shlex.quote(posixpath.basename(job.input_wsl))]
         if job.threads and job.threads > 1:
-            parts += ["--n-threads", str(job.threads)]
+            # MOOSE 只认 --n-threads=N 形式
+            parts.append(f"--n-threads={job.threads}")
         if job.extra.strip():
             parts.append(job.extra.strip())
         return f"cd {shlex.quote(job.workdir_wsl)} && " + " ".join(parts) + " 2>&1"
